@@ -22,15 +22,19 @@ debug commands 2;
 # Filter out route-server peering prefix(es) and native prefix(es)
 
 function avoid_martians()
+int set bogon_asns;          # Full bogon ASN list
 prefix set default_route;    # Default Route
 prefix set ipv4_bogons;      # Bogus IPv4 like RFC1918 private IPv4
 prefix set peering_prefix;   # Peering prefix(es)
 prefix set full_bogons;      # Full bogons list
 prefix set spamhaus_drop;    # Spamhaus DROP list
-int    set private_as_16bit; # Private 16-bit AS range [ 64512..65535 ]
 {
     # Filter out default route
     default_route    = [ 0.0.0.0/32-, 0.0.0.0/0{28,32}, 0.0.0.0/0{0,7} ];
+
+    # Filter out paths with a Bogon ASN in the AS_PATH
+    # sources: RFC 7607, RFC 4893, RFC 5398, RFC 6996, RFC 7300, IANA
+    bogon_asns = [0, 23456, 64496..131071, 4200000000..4294967295];
 
     # Filter out RFC1918 addresses
         ipv4_bogons  = [
@@ -49,7 +53,6 @@ int    set private_as_16bit; # Private 16-bit AS range [ 64512..65535 ]
           224.0.0.0/3+
         ];
     peering_prefix   = [ {{ peering_prefix }} ];
-    private_as_16bit = [ 64512..65535 ];
 
     # RFC + NORIR + NOLIR bogons
     full_bogons = [
@@ -68,9 +71,9 @@ int    set private_as_16bit; # Private 16-bit AS range [ 64512..65535 ]
     if (net ~ default_route)                    then return false;
     if (net ~ ipv4_bogons)                      then return false;
     if (net ~ peering_prefix)                   then return false;
+    if (bgp_path ~ bogon_asns)                  then return false;
     if (net ~ full_bogons)                      then bgp_community.add(({{ local_as_number }},60001));
     if (net ~ spamhaus_drop)                    then bgp_community.add(({{ local_as_number }},60003));
-    if (bgp_path.first ~ private_as_16bit)      then return false;
 #   if (net.len < 8) || (net.len > 24)          then return false;
 
     return true;
